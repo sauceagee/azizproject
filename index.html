@@ -1,0 +1,1556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body style="margin:0">
+<title>Torpor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=DM+Sans:wght@400;500&display=swap">
+<style>
+:root{--bg:#080604;--fg:#EDE5D8;--muted:#6B5F50;--gold:#C68B2C;color-scheme:dark}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--fg);font-family:"DM Sans",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+canvas#scene{display:block;position:fixed;inset:0;touch-action:none}
+.vignette{position:fixed;inset:0;pointer-events:none;z-index:2;
+  background:radial-gradient(ellipse 78% 68% at 50% 48%,transparent 32%,rgba(8,6,4,.5) 100%)}
+
+/* ---------- hand rings (large, forgiving) ---------- */
+.hand{position:fixed;z-index:4;width:184px;height:184px;margin:-92px 0 0 -92px;
+  pointer-events:none;opacity:0;transition:opacity .3s ease;will-change:transform}
+.hand.on{opacity:1}
+.hand .ring{position:absolute;inset:0;border-radius:50%;
+  border:1px solid rgba(198,139,44,.38)}
+.hand .ring2{position:absolute;inset:26%;border-radius:50%;
+  border:1px solid rgba(198,139,44,.22)}
+.hand .warm{position:absolute;inset:4%;border-radius:50%;
+  background:radial-gradient(circle,rgba(214,150,52,.26) 0%,rgba(198,139,44,.07) 55%,
+    rgba(198,139,44,0) 72%);
+  transform:scale(.45);opacity:0;transition:transform .16s ease,opacity .16s ease}
+
+.label{font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted)}
+
+/* ---------- screens ---------- */
+.screen{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;background:var(--bg);overflow-y:auto;
+  transition:opacity 1.1s ease;
+  padding:46px max(20px,env(safe-area-inset-left,0px)) 42px}
+.screen.gone{opacity:0;pointer-events:none}
+.inner{max-width:600px;width:100%;margin:auto}
+#intro{cursor:pointer;text-align:center}
+#intro h1{font-family:"Cormorant Garamond",Georgia,serif;font-weight:300;line-height:1;
+  font-size:clamp(42px,10vw,88px);letter-spacing:.14em;text-transform:uppercase;
+  opacity:0;animation:fi 2.2s ease .3s forwards}
+#intro .sub{font-size:11px;letter-spacing:.32em;text-transform:uppercase;
+  color:var(--muted);margin-top:16px;opacity:0;animation:fi 2s ease 1.3s forwards}
+.idea{margin-top:34px;text-align:left;opacity:0;animation:fi 2s ease 2s forwards;
+  border-top:1px solid rgba(237,229,216,.1);padding-top:26px}
+.idea p{font-family:"Cormorant Garamond",Georgia,serif;font-weight:300;
+  font-size:clamp(14.5px,1.9vw,17.5px);line-height:1.78;color:var(--fg);
+  opacity:.74;margin-bottom:14px}
+.idea p:last-child{margin-bottom:0}
+.gestures{margin-top:30px;display:grid;gap:14px;text-align:left;
+  opacity:0;animation:fi 1.8s ease 2.7s forwards}
+.g{display:grid;grid-template-columns:34px 1fr;gap:14px;align-items:start}
+.g .ic{font-size:19px;line-height:1.2;text-align:center;color:var(--gold);opacity:.85}
+.g .t{font-size:12.5px;line-height:1.55;color:var(--fg);opacity:.8}
+.g .t b{display:block;font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--muted);font-weight:500;margin-bottom:3px}
+#intro .tap{margin-top:34px;font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--muted);opacity:0;animation:fi 1.5s ease 3.5s forwards}
+@keyframes fi{to{opacity:1}}
+
+/* ---------- calibration ---------- */
+#calib{display:none}
+#calib.on{display:flex}
+#calib .inner{text-align:center}
+.cal-h{font-family:"Cormorant Garamond",Georgia,serif;font-weight:300;
+  font-size:clamp(20px,3.4vw,27px);letter-spacing:.04em;opacity:.9}
+.cal-s{margin-top:14px;font-size:12.5px;line-height:1.7;color:var(--fg);opacity:.62;
+  max-width:400px;margin-left:auto;margin-right:auto}
+.cam-wrap{margin:28px auto 0;width:min(300px,72vw);aspect-ratio:4/3;position:relative;
+  border:1px solid rgba(237,229,216,.14);border-radius:3px;overflow:hidden;background:#0d0a07}
+#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  transform:scaleX(-1);opacity:.5}
+#skel{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1)}
+.checks{margin-top:22px;display:flex;gap:22px;justify-content:center;flex-wrap:wrap}
+.chk{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+  transition:color .3s}
+.chk.ok{color:var(--gold)}
+.chk::before{content:"\25CB";margin-right:7px}
+.chk.ok::before{content:"\25CF"}
+.cal-stat{margin-top:24px;font-size:10px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--muted);min-height:14px}
+.cal-count{margin-top:8px;font-family:"Cormorant Garamond",Georgia,serif;
+  font-size:34px;font-weight:300;color:var(--gold);min-height:40px;opacity:.9}
+.btn{margin-top:22px;background:none;border:1px solid rgba(237,229,216,.2);
+  color:var(--muted);border-radius:999px;padding:10px 24px;cursor:pointer;
+  font-family:inherit;font-size:10px;letter-spacing:.24em;text-transform:uppercase;
+  transition:color .2s,border-color .2s;display:none}
+.btn.on{display:inline-block}
+.btn:hover{color:var(--fg);border-color:rgba(237,229,216,.45)}
+
+/* ---------- HUD ---------- */
+.hud{position:fixed;top:env(safe-area-inset-top,0px);left:0;right:0;z-index:5;
+  display:flex;justify-content:space-between;align-items:flex-start;padding:16px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  pointer-events:none;opacity:0;transition:opacity .8s}
+.hud.show{opacity:1}
+.tally{font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--muted)}
+.tally b{color:var(--gold);font-weight:600}
+.meters{display:grid;gap:7px;justify-items:end}
+.m{display:grid;grid-template-columns:auto 54px;gap:9px;align-items:center}
+.m span{font-size:8.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.m i{display:block;height:1.5px;background:rgba(237,229,216,.14)}
+.m.on span{color:var(--fg);opacity:.85}
+
+/* ---------- coach + narrative ---------- */
+.coach{position:fixed;left:0;right:0;top:calc(50% + 128px);z-index:6;text-align:center;
+  pointer-events:none;padding-inline:max(24px,env(safe-area-inset-left,0px));
+  font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--fg);
+  opacity:0;transition:opacity .7s ease}
+.coach.show{opacity:.7}
+.narr{position:fixed;left:max(40px,env(safe-area-inset-left,0px));top:50%;
+  width:min(33vw,440px);z-index:5;text-align:left;pointer-events:none;
+  font-family:"Cormorant Garamond",Georgia,serif;font-weight:300;
+  font-size:clamp(22px,3.0vw,37px);line-height:1.34;letter-spacing:.005em;color:var(--fg);
+  text-wrap:balance;
+  opacity:0;transform:translateY(-50%) translateX(-14px);
+  transition:opacity 2s ease,transform 2s ease}
+.narr.show{opacity:.92;transform:translateY(-50%) translateX(0)}
+@media (max-width:820px){
+  .narr{left:0;right:0;width:auto;top:auto;text-align:center;
+    bottom:calc(15% + env(safe-area-inset-bottom,0px));
+    padding-inline:max(26px,env(safe-area-inset-left,0px));
+    font-size:clamp(19px,4.8vw,27px);
+    transform:translateY(10px)}
+  .narr.show{transform:translateY(0)}
+}
+
+/* ---------- about ---------- */
+#about{position:fixed;inset:0;z-index:15;background:rgba(8,6,4,.94);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);overflow-y:auto;
+  opacity:0;pointer-events:none;transition:opacity .5s ease;
+  padding:46px max(22px,env(safe-area-inset-left,0px))}
+#about.show{opacity:1;pointer-events:auto}
+.ab-h{font-family:"Cormorant Garamond",Georgia,serif;font-size:12px;letter-spacing:.3em;
+  text-transform:uppercase;color:var(--gold);margin:34px 0 16px}
+.ab-h:first-child{margin-top:0}
+
+/* ---------- end ---------- */
+.endscreen{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;pointer-events:none;
+  opacity:0;transition:opacity 2.5s}
+.endscreen.show{opacity:1}
+.endscreen .msg{font-family:"Cormorant Garamond",Georgia,serif;font-weight:300;
+  font-size:clamp(15px,3.2vw,24px);letter-spacing:.08em;opacity:.78;text-align:center;
+  padding-inline:max(24px,env(safe-area-inset-left,0px))}
+.restart{pointer-events:auto;margin-top:30px;background:none;
+  border:1px solid rgba(237,229,216,.18);color:var(--muted);border-radius:999px;
+  padding:9px 22px;cursor:pointer;font-family:inherit;font-size:10px;
+  letter-spacing:.24em;text-transform:uppercase;opacity:0;transition:opacity 1.2s,color .2s}
+.restart.show{opacity:1}
+.restart:hover{color:var(--fg)}
+
+.note{position:fixed;bottom:0;left:0;right:0;z-index:7;text-align:center;
+  padding:0 16px calc(12px + env(safe-area-inset-bottom,0px));
+  font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);
+  opacity:0;transition:opacity .8s;pointer-events:none}
+.note.show{opacity:.5}
+
+/* live webcam thumbnail while playing — shown so a screen recording can
+   capture the hand driving the piece. Press C to hide it. */
+.pip{position:fixed;z-index:6;display:none;
+  left:max(16px,env(safe-area-inset-left,0px));
+  bottom:calc(20px + env(safe-area-inset-bottom,0px));
+  width:146px;pointer-events:none;opacity:0;transition:opacity .6s ease}
+.pip.show{display:block;opacity:.9}
+.pip .cam-wrap{margin:0;width:100%}
+.pip-label{position:absolute;top:-15px;left:1px;font-size:8px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--muted)}
+@media (max-width:820px){ .pip{width:104px} }
+
+/* a tappable way into the idea text, for phones with no keyboard */
+#infoBtn{position:fixed;z-index:8;display:none;
+  right:max(14px,env(safe-area-inset-right,0px));
+  bottom:calc(46px + env(safe-area-inset-bottom,0px));
+  margin:0;width:38px;height:38px;padding:0;border-radius:50%;
+  font-family:"Cormorant Garamond",Georgia,serif;font-size:17px;letter-spacing:0;
+  text-transform:none;line-height:1}
+#infoBtn.show{display:block}
+</style>
+
+<canvas id="scene"></canvas>
+<div class="vignette"></div>
+<div class="hand" id="hand"><div class="ring"></div><div class="ring2"></div><div class="warm"></div></div>
+
+<!-- ============ intro ============ -->
+<div class="screen" id="intro">
+  <div class="inner">
+    <h1>Torpor</h1>
+    <div class="sub">any interaction leaves a trace</div>
+    <div class="idea" id="ideaSlot"></div>
+    <div class="gestures" id="gestureSlot"></div>
+    <div class="tap">click once to allow the camera</div>
+  </div>
+</div>
+
+<!-- ============ calibration ============ -->
+<div class="screen" id="calib">
+  <div class="inner">
+    <div class="cal-h">Hold up a hand</div>
+    <div class="cal-s">Raise one hand where the camera can see it and keep it up.
+      Only one hand is tracked &mdash; you do not need to be fully in frame.</div>
+    <div class="cam-wrap">
+      <video id="cam" playsinline muted></video>
+      <canvas id="skel"></canvas>
+    </div>
+    <div class="checks">
+      <div class="chk" id="chkCam">camera</div>
+      <div class="chk" id="chkHands">hand</div>
+    </div>
+    <div class="cal-stat" id="calStat">starting camera</div>
+    <div class="cal-count" id="calCount"></div>
+    <button class="btn" id="skipBtn">continue without camera</button>
+  </div>
+</div>
+
+<!-- ============ in-world ============ -->
+<div class="hud" id="hud">
+  <div class="tally"><b id="fallen">0</b> fallen</div>
+  <div class="meters">
+    <div class="m" id="mHands"><span>hand</span><i></i></div>
+    <div class="m" id="mWarm"><span>warmth</span><i></i></div>
+  </div>
+</div>
+
+<div class="pip" id="pip"><div class="pip-label">camera</div></div>
+<div class="coach" id="coach"></div>
+<div class="narr" id="narr"></div>
+<div class="note" id="note"></div>
+<button class="btn on" id="infoBtn" aria-label="about">i</button>
+
+<!-- ============ about ============ -->
+<div id="about">
+  <div class="inner">
+    <div class="ab-h">The idea</div>
+    <div class="idea" id="ideaSrc" style="animation:none;opacity:1;border:0;padding:0;margin:0">
+      <p>Each winter, hundreds of millions of monarchs collapse onto a few hectares of
+        oyamel fir in the mountains of Michoac&aacute;n. Below roughly ten degrees they
+        enter torpor: they cannot fly, cannot crawl, cannot leave. They hang in clumps so
+        dense the branches bend, each one gripping the bark or the butterfly above it.</p>
+      <p>Torpor is not sleep. It is a wager &mdash; every gram of stored fat has to last
+        until March. Warmth is what breaks the wager. Sunlight, a hand, the heat of a body
+        standing too close. A butterfly roused in December spends what it cannot replace,
+        and one that drops to the forest floor usually does not climb back.</p>
+      <p>This is why visitors to the sanctuaries are asked to stand still, to stay quiet,
+        to keep to the path. This piece puts you on a path you do not control, and leaves
+        you only your hands.</p>
+    </div>
+    <div class="ab-h">Why</div>
+    <div class="idea" style="animation:none;opacity:1;border:0;padding:0;margin:0">
+      <p>I wanted an interaction that punishes attention. Most interactive work rewards you
+        for pressing further in &mdash; for looking harder, getting closer, touching the
+        thing. Here the reward and the damage are the same gesture. You cannot reach the
+        colony without warming it, and you cannot warm it without spending something that
+        belonged to spring.</p>
+      <p>You are carried from branch to branch whether you like it or not. There is no
+        walking away and no way to be told off. The only thing you can decide is whether to
+        keep your hands down. Fragility is not a defence, and the trace you leave does not
+        need your consent to be permanent.</p>
+    </div>
+    <div class="ab-h">Taking part</div>
+    <div class="gestures" id="gestureSrc" style="animation:none;opacity:1;margin-top:0">
+      <div class="g"><div class="ic">&#9995;</div><div class="t"><b>raise a hand</b>
+        A ring follows your hand. One hand at a time.</div></div>
+      <div class="g"><div class="ic">&#10021;</div><div class="t"><b>move it over them</b>
+        Hold the ring on a clump to warm it. Sweep to warm them faster.</div></div>
+      <div class="g"><div class="ic">&#8595;</div><div class="t"><b>keep your hands down</b>
+        The only way to leave a colony as you found it.</div></div>
+    </div>
+    <div class="label" style="margin-top:38px;text-align:center">press i to close</div>
+  </div>
+</div>
+
+<div class="endscreen" id="endscreen">
+  <div class="msg">any interaction leaves a trace</div>
+  <button class="restart" id="restart">&#8635; again</button>
+</div>
+
+<!-- ============================================================= -->
+<script>
+window.TORPOR_MOTION={
+  on:false, failed:false, camOK:false, handsOK:false,
+  status:'', countdown:0,
+  hand:{live:false,x:0,y:0,energy:0}
+};
+</script>
+
+<script>
+(function(){
+"use strict";
+var PI=Math.PI, TAU=PI*2;
+var M=window.TORPOR_MOTION;
+
+document.getElementById('ideaSlot').innerHTML=document.getElementById('ideaSrc').innerHTML;
+document.getElementById('gestureSlot').innerHTML=document.getElementById('gestureSrc').innerHTML;
+
+var introEl=document.getElementById('intro'), calibEl=document.getElementById('calib');
+var hud=document.getElementById('hud'), fallenEl=document.getElementById('fallen');
+var coachEl=document.getElementById('coach'), narrEl=document.getElementById('narr');
+var noteEl=document.getElementById('note'), aboutEl=document.getElementById('about');
+var endEl=document.getElementById('endscreen'), restartBtn=document.getElementById('restart');
+var skipBtn=document.getElementById('skipBtn');
+var calStat=document.getElementById('calStat'), calCount=document.getElementById('calCount');
+var chkCam=document.getElementById('chkCam'), chkHands=document.getElementById('chkHands');
+var mHands=document.getElementById('mHands'), mWarm=document.getElementById('mWarm');
+var handEl=document.getElementById('hand');
+var handWarm=handEl.querySelector('.warm');
+
+var phase='intro', motionMode=false;
+
+/* ===================== renderer ===================== */
+var W=window.innerWidth, H=window.innerHeight;
+var renderer=new THREE.WebGLRenderer({canvas:document.getElementById('scene'),antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.75));
+renderer.setSize(W,H);
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.08;
+renderer.outputEncoding=THREE.sRGBEncoding;
+
+var scene=new THREE.Scene();
+scene.background=new THREE.Color(0x0b0906);
+scene.fog=new THREE.FogExp2(0x0a0806,0.042);
+
+var camera=new THREE.PerspectiveCamera(60,W/H,0.04,80);
+camera.position.set(0,1.75,13);
+
+/* ===================== textures ===================== */
+function cv(w,h){var c=document.createElement('canvas');c.width=w;c.height=h;return c;}
+function tex(c,rx,ry){
+  var t=new THREE.Texture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  if(rx) t.repeat.set(rx,ry||rx);
+  t.needsUpdate=true; return t;
+}
+
+function makeBark(){
+  var c=cv(128,256), g=c.getContext('2d');
+  g.fillStyle='#1d140b'; g.fillRect(0,0,128,256);
+  for(var i=0;i<260;i++){
+    var x=Math.random()*128, w=0.8+Math.random()*3.4, y=Math.random()*256;
+    var h=40+Math.random()*200, light=Math.random()>0.55;
+    g.fillStyle='rgba('+(light?'48,35,20':'8,5,2')+','+(0.12+Math.random()*0.34)+')';
+    g.fillRect(x,y,w,h);
+  }
+  for(var k=0;k<60;k++){
+    g.fillStyle='rgba(44,58,28,'+(0.05+Math.random()*0.16)+')';
+    g.beginPath();
+    g.ellipse(Math.random()*128,Math.random()*256,2+Math.random()*7,1+Math.random()*4,
+      Math.random()*3,0,TAU); g.fill();
+  }
+  return tex(c,2,3);
+}
+function makeGround(){
+  var c=cv(512,512), g=c.getContext('2d');
+  g.fillStyle='#0c0804'; g.fillRect(0,0,512,512);
+  for(var i=0;i<2600;i++){
+    var v=Math.random();
+    g.fillStyle='rgba('+(v>0.6?'34,25,12':'5,3,1')+','+(0.05+Math.random()*0.22)+')';
+    g.fillRect(Math.random()*512,Math.random()*512,1+Math.random()*4,1+Math.random()*3);
+  }
+  for(var k=0;k<170;k++){
+    g.save(); g.translate(Math.random()*512,Math.random()*512); g.rotate(Math.random()*TAU);
+    g.fillStyle='rgba('+(Math.random()>0.5?'44,31,14':'24,19,9')+','+(0.16+Math.random()*0.26)+')';
+    g.fillRect(0,0,5+Math.random()*22,0.8+Math.random()*2);
+    g.restore();
+  }
+  return tex(c,9,9);
+}
+function makeDot(){
+  var c=cv(32,32), g=c.getContext('2d');
+  var rg=g.createRadialGradient(16,16,0,16,16,16);
+  rg.addColorStop(0,'rgba(255,238,205,.95)');
+  rg.addColorStop(.35,'rgba(255,228,180,.35)');
+  rg.addColorStop(1,'rgba(255,220,170,0)');
+  g.fillStyle=rg; g.fillRect(0,0,32,32);
+  return tex(c);
+}
+function makeShaft(){
+  var c=cv(64,256), g=c.getContext('2d');
+  var lg=g.createLinearGradient(0,0,0,256);
+  lg.addColorStop(0,'rgba(226,186,110,.52)');
+  lg.addColorStop(.45,'rgba(214,170,96,.18)');
+  lg.addColorStop(1,'rgba(200,160,90,0)');
+  g.fillStyle=lg; g.fillRect(0,0,64,256);
+  var eg=g.createLinearGradient(0,0,64,0);
+  eg.addColorStop(0,'rgba(0,0,0,1)'); eg.addColorStop(.5,'rgba(0,0,0,0)');
+  eg.addColorStop(1,'rgba(0,0,0,1)');
+  g.globalCompositeOperation='destination-out';
+  g.fillStyle=eg; g.fillRect(0,0,64,256);
+  return tex(c);
+}
+function makeMist(){
+  var c=cv(256,256), g=c.getContext('2d');
+  var rg=g.createRadialGradient(128,128,10,128,128,128);
+  rg.addColorStop(0,'rgba(150,140,120,.30)');
+  rg.addColorStop(.6,'rgba(140,130,112,.12)');
+  rg.addColorStop(1,'rgba(130,120,104,0)');
+  g.fillStyle=rg; g.fillRect(0,0,256,256);
+  return tex(c);
+}
+function makeFern(){
+  var c=cv(64,64), g=c.getContext('2d');
+  g.strokeStyle='#243a16'; g.lineWidth=2.2; g.lineCap='round';
+  g.beginPath(); g.moveTo(32,63); g.quadraticCurveTo(30,34,33,6); g.stroke();
+  g.lineWidth=1.5;
+  for(var i=0;i<9;i++){
+    var y=56-i*5.6, len=15-i*1.35, lean=i*0.5;
+    g.strokeStyle='rgba(37,60,22,'+(0.95-i*0.05)+')';
+    g.beginPath(); g.moveTo(32,y); g.quadraticCurveTo(32-len*0.6,y-3-lean,32-len,y-7-lean); g.stroke();
+    g.beginPath(); g.moveTo(32,y); g.quadraticCurveTo(32+len*0.6,y-3-lean,32+len,y-7-lean); g.stroke();
+  }
+  return tex(c);
+}
+
+/* ---------- monarch wing: right half, body edge at x=0, head at top ----------
+   Danaus plexippus: elongate triangular forewing with a pointed apex, rounded
+   hindwing below, bright orange cells divided by heavy black veins, a broad
+   black margin carrying a double row of white spots, and one antenna drawn in
+   (the body is a separate mesh and cannot carry one). */
+function makeMonarchWing(pale){
+  var c=cv(128,128), g=c.getContext('2d');
+  g.clearRect(0,0,128,128);
+
+  var VEIN   = pale ? '#33210d' : '#170d04';
+  var MARGIN = pale ? '#2a1a08' : '#140b03';
+  var SPOT   = pale ? '#fffdf6' : '#fcf6e8';
+  var FA = pale ? '#bd8244' : '#F2941F';   /* forewing, root -> outer */
+  var FB = pale ? '#a16a33' : '#DE6E0B';
+  var HA = pale ? '#c29b63' : '#EE971F';   /* hindwing: buff beneath */
+  var HB = pale ? '#a9854f' : '#DF7510';
+
+  /* ---- outlines: long pointed forewing, smaller rounded hindwing ---- */
+  var fore=new Path2D();
+  fore.moveTo(3,44);
+  fore.bezierCurveTo(30,30,80,12,120,7);     /* costa, nearly straight */
+  fore.lineTo(124,13);                        /* sharp apex */
+  fore.bezierCurveTo(112,30,98,46,80,60);     /* outer margin, slightly concave */
+  fore.bezierCurveTo(62,70,28,64,3,57);       /* trailing edge back to the body */
+  fore.closePath();
+
+  var hind=new Path2D();
+  hind.moveTo(5,58);
+  hind.bezierCurveTo(30,56,58,64,72,78);
+  hind.bezierCurveTo(82,90,78,106,58,116);
+  hind.bezierCurveTo(40,124,14,110,5,88);
+  hind.closePath();
+
+  /* antenna first, so the forewing root covers its base */
+  g.strokeStyle=MARGIN; g.lineWidth=1.9; g.lineCap='round';
+  g.beginPath(); g.moveTo(5,38); g.quadraticCurveTo(26,14,47,6); g.stroke();
+  g.fillStyle=MARGIN;
+  g.beginPath(); g.ellipse(48,5.5,2.6,2.0,-0.4,0,TAU); g.fill();
+
+  /* ---- hindwing ---- */
+  var hg=g.createLinearGradient(5,58,78,116);
+  hg.addColorStop(0,HA); hg.addColorStop(1,HB);
+  g.fillStyle=hg; g.fill(hind);
+  g.save(); g.clip(hind);
+  g.strokeStyle=VEIN; g.lineCap='round'; g.lineWidth=2.0;
+  var hv=[[70,80,40,62],[70,98,42,80],[54,112,32,92],[30,116,18,96],[8,94,6,76]];
+  for(var i=0;i<hv.length;i++){
+    g.beginPath(); g.moveTo(7,64);
+    g.quadraticCurveTo(hv[i][2],hv[i][3],hv[i][0],hv[i][1]); g.stroke();
+  }
+  g.restore();
+  g.strokeStyle=MARGIN; g.lineWidth=6; g.lineJoin='round'; g.stroke(hind);
+
+  /* ---- forewing over it ---- */
+  var fg=g.createLinearGradient(3,40,124,30);
+  fg.addColorStop(0,FA); fg.addColorStop(1,FB);
+  g.fillStyle=fg; g.fill(fore);
+  g.save(); g.clip(fore);
+  /* the black apex field — the monarch's signature */
+  g.fillStyle=MARGIN;
+  var apex=new Path2D();
+  apex.moveTo(78,17);
+  apex.bezierCurveTo(100,9,118,5,126,10);
+  apex.lineTo(126,18);
+  apex.bezierCurveTo(114,34,98,50,80,63);
+  apex.bezierCurveTo(74,56,74,34,78,17);
+  apex.closePath();
+  g.fill(apex);
+  g.strokeStyle=VEIN; g.lineCap='round'; g.lineWidth=2.1;
+  var fv=[[114,12,66,16],[104,26,60,26],[90,40,54,36],[72,52,44,46],[44,58,26,50]];
+  for(var k=0;k<fv.length;k++){
+    g.beginPath(); g.moveTo(5,47);
+    g.quadraticCurveTo(fv[k][2],fv[k][3],fv[k][0],fv[k][1]); g.stroke();
+  }
+  g.lineWidth=1.2;
+  g.beginPath(); g.moveTo(34,34); g.quadraticCurveTo(58,34,80,38); g.stroke();
+  g.restore();
+  g.strokeStyle=MARGIN; g.lineWidth=6.5; g.lineJoin='round'; g.stroke(fore);
+
+  /* ---- white spots: tight ovals hugging the margins ---- */
+  g.fillStyle=SPOT;
+  function spot(x,y,r,rot){ g.beginPath(); g.ellipse(x,y,r,r*0.72,rot||0,0,TAU); g.fill(); }
+  var r=pale?1.9:1.7;
+  var fs=[[114,13],[119,19],[108,24],[112,31],[99,36],[103,43],[90,47],[93,54],[82,57]];
+  for(var a=0;a<fs.length;a++) spot(fs[a][0],fs[a][1],r,-0.6);
+  g.globalAlpha=0.9;
+  spot(96,20,r*1.25,-0.6); spot(88,28,r*1.1,-0.6); spot(104,14,r*1.1,-0.6);
+  g.globalAlpha=1;
+  var hs=[[70,82],[74,92],[70,102],[61,110],[49,116],[36,117],[23,112],[12,100],[7,88]];
+  for(var b=0;b<hs.length;b++) spot(hs[b][0],hs[b][1],r*0.92);
+  g.globalAlpha=0.6;
+  var hs2=[[63,86],[66,96],[60,104],[50,109],[38,111],[27,106]];
+  for(var d=0;d<hs2.length;d++) spot(hs2[d][0],hs2[d][1],r*0.62);
+  g.globalAlpha=1;
+
+  var t=new THREE.Texture(c);
+  t.needsUpdate=true;
+  t.anisotropy=4;
+  return t;
+}
+
+var barkTex=makeBark(), groundTex=makeGround(), dotTex=makeDot();
+var shaftTex=makeShaft(), mistTex=makeMist(), fernTex=makeFern();
+
+/* ===================== light ===================== */
+scene.add(new THREE.AmbientLight(0x2a2016,0.52));
+var sun=new THREE.DirectionalLight(0xdcae60,1.75);
+sun.position.set(5,16,-4); sun.castShadow=true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.camera.near=1; sun.shadow.camera.far=44;
+sun.shadow.camera.left=-18; sun.shadow.camera.right=18;
+sun.shadow.camera.top=22; sun.shadow.camera.bottom=-6;
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0x27331a,0x0d0904,0.30));
+var bounce=new THREE.PointLight(0xc5842f,0.22,9);
+bounce.position.set(0,0.7,2); scene.add(bounce);
+
+var ground=new THREE.Mesh(new THREE.PlaneGeometry(90,90),
+  new THREE.MeshLambertMaterial({map:groundTex}));
+ground.rotation.x=-PI/2; ground.receiveShadow=true; scene.add(ground);
+
+/* ===================== trees ===================== */
+var barkMat=new THREE.MeshLambertMaterial({map:barkTex});
+var treeDefs=[
+  {x:0,z:0,r:1.1,h:13},{x:-5,z:-4,r:0.7,h:10},{x:4.5,z:-6,r:0.9,h:11},
+  {x:-3,z:5,r:0.6,h:9},{x:6,z:3,r:0.85,h:12},{x:-7,z:-1,r:0.55,h:8},
+  {x:2,z:-10,r:0.75,h:10},{x:-4,z:-9,r:0.65,h:9}
+];
+var branches=[];
+
+function makeBranch(td,ti,angle,by,len,tilt,low){
+  var trunkR=td.r*(1-0.3*(by/td.h));
+  var start=new THREE.Vector3(td.x+Math.cos(angle)*trunkR*0.95,by,
+                              td.z+Math.sin(angle)*trunkR*0.95);
+  var dir=new THREE.Vector3(Math.cos(angle)*Math.cos(tilt),Math.sin(tilt),
+                            Math.sin(angle)*Math.cos(tilt)).normalize();
+  var baseR=td.r*0.048, tipR=baseR*0.34;
+  var mesh=new THREE.Mesh(new THREE.CylinderGeometry(tipR,baseR,len,6,1),barkMat);
+  mesh.position.copy(start).addScaledVector(dir,len*0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir);
+  mesh.castShadow=true; scene.add(mesh);
+  for(var t=0;t<2;t++){
+    var f=0.45+t*0.3;
+    var tw=new THREE.Mesh(new THREE.CylinderGeometry(tipR*0.35,tipR*0.75,len*0.24,4,1),barkMat);
+    var tdir=dir.clone().applyAxisAngle(new THREE.Vector3(0,1,0),(t?0.8:-0.75))
+      .add(new THREE.Vector3(0,0.3,0)).normalize();
+    tw.position.copy(start).addScaledVector(dir,len*f).addScaledVector(tdir,len*0.12);
+    tw.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tdir);
+    scene.add(tw);
+  }
+  branches.push({start:start,dir:dir,len:len,baseR:baseR,tipR:tipR,
+    out:new THREE.Vector3(dir.x,0,dir.z).normalize(),low:low});
+}
+
+for(var ti=0;ti<treeDefs.length;ti++){
+  var td=treeDefs[ti];
+  var trunk=new THREE.Mesh(new THREE.CylinderGeometry(td.r*0.7,td.r,td.h,14,1),barkMat);
+  trunk.position.set(td.x,td.h/2,td.z);
+  trunk.castShadow=true; trunk.receiveShadow=true; scene.add(trunk);
+  for(var ri=0;ri<4;ri++){
+    var ra=TAU/4*ri+ti*0.7;
+    var rm=new THREE.Mesh(new THREE.CylinderGeometry(0.02,td.r*0.33,td.h*0.2,5),barkMat);
+    rm.position.set(td.x+Math.cos(ra)*td.r*0.72,td.h*0.09,td.z+Math.sin(ra)*td.r*0.72);
+    rm.rotation.set(0,ra,0.32); rm.castShadow=true; scene.add(rm);
+  }
+  var nLow=2;
+  for(var bi=0;bi<nLow;bi++){
+    makeBranch(td,ti,TAU*(bi/nLow)+ti*1.3+(Math.random()-0.5)*0.5,
+      2.7+Math.random()*1.0, 1.15+Math.random()*0.75, -0.17+Math.random()*0.13, true);
+  }
+  var nHigh=2+Math.floor(Math.random()*2);
+  for(var bj=0;bj<nHigh;bj++){
+    makeBranch(td,ti,TAU*(bj/nHigh)+ti*2.1+(Math.random()-0.5)*0.5,
+      Math.min(td.h*0.78,5.4+Math.random()*3.0), 1.3+Math.random()*1.3,
+      -0.10+Math.random()*0.22, false);
+  }
+}
+for(var dtr=0;dtr<26;dtr++){
+  var ang=Math.random()*TAU, rad=19+Math.random()*16;
+  var dh=8+Math.random()*9, dr=0.4+Math.random()*0.6;
+  var dm=new THREE.Mesh(new THREE.CylinderGeometry(dr*0.6,dr,dh,7,1),barkMat);
+  dm.position.set(Math.cos(ang)*rad,dh/2,Math.sin(ang)*rad); scene.add(dm);
+}
+var canopyMat=new THREE.MeshLambertMaterial({color:0x14200b,transparent:true,
+  opacity:0.30,depthWrite:false});
+for(var ci=0;ci<treeDefs.length;ci++){
+  var ct=treeDefs[ci];
+  for(var cj=0;cj<4;cj++){
+    var cm=new THREE.Mesh(new THREE.SphereGeometry(ct.r*2.4+Math.random()*1.8,8,6),canopyMat);
+    cm.position.set(ct.x+(Math.random()-0.5)*2.4,ct.h-1.4+Math.random()*2.6,
+                    ct.z+(Math.random()-0.5)*2.4);
+    cm.scale.y=0.55; scene.add(cm);
+  }
+}
+
+/* ===================== atmosphere ===================== */
+var shaftMat=new THREE.MeshBasicMaterial({map:shaftTex,transparent:true,opacity:0.30,
+  depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide});
+var shafts=[];
+for(var s=0;s<5;s++){
+  var sh=new THREE.Mesh(new THREE.PlaneGeometry(2.4+Math.random()*2.2,11),shaftMat.clone());
+  sh.position.set((Math.random()-0.5)*16,6.0+Math.random()*1.6,(Math.random()-0.5)*16);
+  sh.rotation.set(0.20+Math.random()*0.12,Math.random()*TAU,0.10);
+  sh.material.opacity=0.16+Math.random()*0.17;
+  scene.add(sh); shafts.push(sh);
+}
+var mistMat=new THREE.MeshBasicMaterial({map:mistTex,transparent:true,opacity:0.16,
+  depthWrite:false,side:THREE.DoubleSide});
+var mists=[];
+for(var mi=0;mi<4;mi++){
+  var ms=new THREE.Mesh(new THREE.PlaneGeometry(26,26),mistMat.clone());
+  ms.rotation.x=-PI/2;
+  ms.position.set((Math.random()-0.5)*7,0.5+mi*0.75,(Math.random()-0.5)*7);
+  ms.material.opacity=0.13-mi*0.02;
+  scene.add(ms); mists.push(ms);
+}
+var moteCount=700;
+var motePos=new Float32Array(moteCount*3), moteSeed=new Float32Array(moteCount);
+for(var p=0;p<moteCount;p++){
+  motePos[p*3]=(Math.random()-0.5)*34;
+  motePos[p*3+1]=0.25+Math.random()*7.5;
+  motePos[p*3+2]=(Math.random()-0.5)*34;
+  moteSeed[p]=Math.random()*TAU;
+}
+var moteGeo=new THREE.BufferGeometry();
+moteGeo.setAttribute('position',new THREE.BufferAttribute(motePos,3));
+var motes=new THREE.Points(moteGeo,new THREE.PointsMaterial({
+  map:dotTex,size:0.055,transparent:true,opacity:0.5,depthWrite:false,
+  blending:THREE.AdditiveBlending,sizeAttenuation:true}));
+scene.add(motes);
+var fernMat=new THREE.MeshLambertMaterial({map:fernTex,transparent:true,
+  alphaTest:0.3,side:THREE.DoubleSide});
+for(var fi=0;fi<64;fi++){
+  var fa=Math.random()*TAU, fr=3+Math.random()*16, fs=0.5+Math.random()*0.85;
+  var fm=new THREE.Mesh(new THREE.PlaneGeometry(fs,fs),fernMat);
+  fm.position.set(Math.cos(fa)*fr,fs*0.47,Math.sin(fa)*fr);
+  fm.rotation.y=Math.random()*TAU; scene.add(fm);
+}
+var litterMat=new THREE.MeshLambertMaterial({color:0x2a1f0e,transparent:true,opacity:0.7});
+for(var li=0;li<120;li++){
+  var lm=new THREE.Mesh(new THREE.PlaneGeometry(0.13+Math.random()*0.22,
+    0.09+Math.random()*0.15),litterMat);
+  lm.position.set((Math.random()-0.5)*34,0.012,(Math.random()-0.5)*34);
+  lm.rotation.set(-PI/2+Math.random()*0.35,0,Math.random()*TAU); scene.add(lm);
+}
+
+/* ===================== butterfly parts ===================== */
+/* wing hinged at the body: inner edge sits at x=0 so rotation.y folds it
+   over the back the way a real butterfly closes, rather than spinning it */
+var wingGeoR=new THREE.PlaneGeometry(0.052,0.058);
+wingGeoR.translate(0.026,0,0);
+var wingGeoL=wingGeoR.clone();
+wingGeoL.scale(-1,1,1);   /* mirrored wing, mirrored pattern */
+/* body runs along Y — head up — with the thorax thicker than the abdomen tip */
+/* a monarch body is ~27mm against a ~50mm forewing: at 62mm it read as a twig */
+var bodyGeo=new THREE.CylinderGeometry(0.0040,0.0021,0.032,5,1);
+
+function wingMat(t){
+  return new THREE.MeshLambertMaterial({map:t,side:THREE.DoubleSide,
+    transparent:true,alphaTest:0.18});
+}
+var texUpper=makeMonarchWing(false);  /* vivid upperside, shown when roused */
+var texUnder=makeMonarchWing(true);   /* paler underside, shown folded at rest */
+var matUpperL=wingMat(texUpper), matUpperR=wingMat(texUpper);
+var matUnderL=wingMat(texUnder), matUnderR=wingMat(texUnder);
+var bodyMat=new THREE.MeshLambertMaterial({color:0x17100a});
+
+/* ===================== butterflies ===================== */
+var flies=[], fallenCount=0, totalButterflies=0;
+var endShown=false, END_AT=30;
+var upV=new THREE.Vector3(0,1,0);
+
+function createButterfly(pos,yA,zA,ci){
+  var g=new THREE.Group();
+  var lw=new THREE.Mesh(wingGeoL,matUnderL);
+  var rw=new THREE.Mesh(wingGeoR,matUnderR);
+  var bd=new THREE.Mesh(bodyGeo,bodyMat);
+  g.add(lw,rw,bd);
+  g.position.copy(pos);
+  setBasis(g,yA,zA);
+  scene.add(g);
+  var f={group:g,lw:lw,rw:rw,home:pos.clone(),
+    yA:yA.clone(),zA:zA.clone(),
+    state:'cling',agit:0,wake:0,heat:0,
+    /* each one grips differently. Under sustained warming wake tops out near
+       0.97, so anything above that never lets go — it only ever shivers.
+       That caps what a single colony can lose to one pair of hands. */
+    letGo:0.86+Math.random()*0.55,
+    phase:Math.random()*TAU,vx:0,vy:0,vz:0,cluster:ci,nb:[]};
+  flies.push(f); totalButterflies++; return f;
+}
+function setBasis(g,yA,zA){
+  var y=yA.clone().normalize();
+  var x=new THREE.Vector3().crossVectors(y,zA);
+  if(x.lengthSq()<1e-8) x.set(1,0,0);
+  x.normalize();
+  var z=new THREE.Vector3().crossVectors(x,y).normalize();
+  g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x,y,z));
+}
+
+/* ---------- a clump: a tight hanging bunch, not a hollow shell ----------
+   Real colonies are shingled — each butterfly grips the bark or the one above
+   it, wings closed, bodies near-vertical, facings scattered around the mass.
+   Positions fill the VOLUME (sqrt for even area density) so wings overlap. */
+var clusterIdx=0, clusters=[];
+function placeClump(anchor, count, low, out){
+  var Hc=0.38+Math.random()*0.13;      /* 38-51 cm */
+  var maxR=0.120+Math.random()*0.032;  /* engulfs the bough it hangs from */
+  var start=flies.length;
+  for(var i=0;i<count;i++){
+    var v=Math.pow(Math.random(),0.72);          /* denser toward the top */
+    var taper=Math.pow(1-Math.pow(v,2.6),0.42);  /* teardrop, point at bottom */
+    var th=Math.random()*TAU;
+    var rr=maxR*taper*Math.sqrt(Math.random());  /* fill, don't shell */
+    var px=anchor.x+Math.cos(th)*rr;
+    var py=anchor.y-v*Hc;
+    var pz=anchor.z+Math.sin(th)*rr;
+    /* hang head-up, leaning slightly outward as if gripping above */
+    var lean=0.16+Math.random()*0.34;
+    var yA=upV.clone().addScaledVector(
+      new THREE.Vector3(Math.cos(th),0,Math.sin(th)),Math.tan(lean));
+    /* Folded wings lie in the plane of the body axis and the fold direction,
+       so the broad wing face points along local X = cross(up, facing).
+       Facing must therefore run TANGENTIALLY (th + PI/2) for the mass to show
+       wings rather than edges; the wide spread leaves ~10% edge-on slivers,
+       which is what a real clump looks like. */
+    var fa=th+PI*0.5+(Math.random()-0.5)*2.8;
+    var zA=new THREE.Vector3(Math.cos(fa),0,Math.sin(fa));
+    createButterfly(new THREE.Vector3(px,py,pz),yA,zA,clusterIdx);
+  }
+  for(var a=start;a<flies.length;a++){
+    var fa2=flies[a], best=[];
+    for(var b=start;b<flies.length;b++){
+      if(b===a)continue;
+      var dx=flies[b].home.x-fa2.home.x,dy=flies[b].home.y-fa2.home.y,
+          dz=flies[b].home.z-fa2.home.z;
+      best.push([dx*dx+dy*dy+dz*dz,b]);
+    }
+    best.sort(function(p,q){return p[0]-q[0];});
+    for(var k=0;k<5&&k<best.length;k++) fa2.nb.push(best[k][1]);
+  }
+  clusters.push({pos:new THREE.Vector3(anchor.x,anchor.y-Hc*0.40,anchor.z),
+    idx:clusterIdx,low:low,h:Hc,out:out.clone()});
+  clusterIdx++;
+}
+
+var MAX_FLIES=1000;
+(function loadBranches(){
+  /* low branches carry the colonies you are taken to; high ones are scenery */
+  var order=branches.slice().sort(function(a,b){
+    return (a.low===b.low)?0:(a.low?-1:1);
+  });
+  for(var i=0;i<order.length;i++){
+    if(totalButterflies>=MAX_FLIES) break;
+    var br=order[i];
+    if(br.low ? (Math.random()>0.68) : (Math.random()>0.30)) continue;
+    var nClumps=1;
+    for(var c=0;c<nClumps;c++){
+      if(totalButterflies>=MAX_FLIES) break;
+      /* hang from a point along the branch, out where it is thin enough */
+      var f=0.52+Math.random()*0.26;
+      if(f>0.94) f=0.94;
+      var anchor=br.start.clone().addScaledVector(br.dir,br.len*f);
+      var cnt=br.low?(78+Math.floor(Math.random()*16))
+                    :(16+Math.floor(Math.random()*7));
+      if(totalButterflies+cnt>MAX_FLIES) cnt=MAX_FLIES-totalButterflies;
+      if(cnt<10) break;
+      placeClump(anchor,cnt,br.low,br.out);
+    }
+  }
+})();
+END_AT=Math.max(30,Math.round(totalButterflies*0.10));
+
+/* ===================== camera rig ===================== */
+var lowColonies=clusters.filter(function(c){return c.low;});
+var tour=[], pool=lowColonies.slice();
+var cursor=new THREE.Vector3(0,1.8,13);
+while(pool.length&&tour.length<6){
+  var bi2=0, bd=Infinity;
+  for(var q=0;q<pool.length;q++){
+    var dd=cursor.distanceTo(pool[q].pos);
+    if(dd<bd){bd=dd;bi2=q;}
+  }
+  tour.push(pool[bi2]); cursor=pool[bi2].pos.clone(); pool.splice(bi2,1);
+}
+/* how close a trunk comes to the line of sight between a viewpoint and a
+   colony — used to make sure we never park the camera behind a tree */
+function sightBlocked(from,to){
+  var worst=0;
+  for(var t=0;t<treeDefs.length;t++){
+    var td=treeDefs[t];
+    var ax=from.x-td.x, az=from.z-td.z;
+    var bx=to.x-td.x,   bz=to.z-td.z;
+    var dx=bx-ax, dz=bz-az;
+    var len2=dx*dx+dz*dz;
+    var u=len2>1e-6 ? ((-ax*dx-az*dz)/len2) : 0;
+    u=Math.max(0,Math.min(1,u));
+    var cx=ax+dx*u, cz=az+dz*u;
+    var d=Math.sqrt(cx*cx+cz*cz);
+    var pen=(td.r+0.22)-d;            /* >0 means the trunk is in the way */
+    if(pen>worst) worst=pen;
+  }
+  return worst;
+}
+
+var stations=[{pos:new THREE.Vector3(0,1.85,12.5),look:new THREE.Vector3(0,4.4,0),colony:null}];
+for(var sq=0;sq<tour.length;sq++){
+  var cc=tour[sq];
+  /* prefer standing outboard of the bough, but reject any viewpoint with a
+     trunk in the way and take the clearest alternative instead */
+  var prefer=Math.atan2(cc.out.z,cc.out.x);
+  var best=null, bestScore=Infinity;
+  for(var cand=0;cand<20;cand++){
+    var swing=(cand===0)?0:((cand%2?1:-1)*Math.ceil(cand/2)*(PI/10));
+    var ang=prefer+swing;
+    var dist=1.12;
+    var pp=new THREE.Vector3(cc.pos.x+Math.cos(ang)*dist,0,cc.pos.z+Math.sin(ang)*dist);
+    pp.y=Math.max(1.25,Math.min(3.1,cc.pos.y+0.02));
+    var blocked=sightBlocked(pp,cc.pos);
+    /* also keep the camera itself out of a trunk */
+    var inside=0;
+    for(var t2=0;t2<treeDefs.length;t2++){
+      var td2=treeDefs[t2];
+      var dd=Math.sqrt((pp.x-td2.x)*(pp.x-td2.x)+(pp.z-td2.z)*(pp.z-td2.z));
+      if(dd<td2.r+0.35) inside=Math.max(inside,td2.r+0.35-dd);
+    }
+    var score=blocked*10+inside*10+Math.abs(swing)*0.35;
+    if(score<bestScore){ bestScore=score; best=pp; }
+    if(score<0.01) break;
+  }
+  stations.push({pos:best,look:cc.pos.clone(),colony:cc.idx});
+}
+
+var TRANSIT=8.5, DWELL=17.0;
+var rig={i:0,next:1,mode:'dwell',t:DWELL*0.72,ctrl:new THREE.Vector3()};
+var lookNow=stations[0].look.clone(), posNow=stations[0].pos.clone();
+camera.position.copy(posNow);
+
+function ctrlFor(a,b){
+  var m=a.clone().add(b).multiplyScalar(0.5);
+  var out=new THREE.Vector3(m.x,0,m.z);
+  if(out.lengthSq()<0.01) out.set(0,0,1);
+  out.normalize().multiplyScalar(1.5);
+  m.add(out); m.y+=0.85; return m;
+}
+function beginTransit(){
+  rig.mode='transit'; rig.t=0;
+  rig.ctrl=ctrlFor(stations[rig.i].pos,stations[rig.next].pos);
+  tellTransit(rig.next);
+}
+function beginDwell(){
+  rig.mode='dwell'; rig.t=0; rig.i=rig.next;
+  rig.next=(rig.i+1)%stations.length;
+  if(rig.next===0) rig.next=1;
+  tellDwell(rig.i);
+}
+function bez(a,c,b,t){
+  var it=1-t;
+  return new THREE.Vector3(
+    it*it*a.x+2*it*t*c.x+t*t*b.x,
+    it*it*a.y+2*it*t*c.y+t*t*b.y,
+    it*it*a.z+2*it*t*c.z+t*t*b.z);
+}
+function smoothstep(t){ return t*t*(3-2*t); }
+
+var breath=0;
+function updateRig(dt){
+  rig.t+=dt; breath+=dt;
+  var tp,tl;
+  if(rig.mode==='dwell'){
+    var st=stations[rig.i], dp=rig.t*0.16;
+    tp=st.pos.clone();
+    tp.x+=Math.sin(dp)*0.13; tp.y+=Math.sin(dp*0.73)*0.05; tp.z+=Math.cos(dp*0.86)*0.13;
+    tl=st.look.clone(); tl.y+=Math.sin(dp*0.6)*0.045;
+    if(rig.t>=DWELL) beginTransit();
+  } else {
+    var t=Math.min(1,rig.t/TRANSIT), e=smoothstep(t);
+    var a=stations[rig.i], b=stations[rig.next];
+    tp=bez(a.pos,rig.ctrl,b.pos,e);
+    tl=a.look.clone().lerp(b.look,smoothstep(Math.min(1,t*1.12)));
+    if(rig.t>=TRANSIT) beginDwell();
+  }
+  tp.y+=Math.sin(breath*0.52)*0.02;
+  posNow.lerp(tp,Math.min(1,dt*2.4));
+  lookNow.lerp(tl,Math.min(1,dt*2.0));
+  camera.position.copy(posNow);
+  camera.lookAt(lookNow);
+  bounce.position.set(posNow.x,0.7,posNow.z);
+}
+
+/* ===================== narrative ===================== */
+var narrTimer=null;
+function showNarr(t,hold){
+  narrEl.textContent=t; narrEl.classList.add('show');
+  if(narrTimer)clearTimeout(narrTimer);
+  narrTimer=setTimeout(function(){narrEl.classList.remove('show');},hold||7500);
+}
+/* The tour tells the migration in order: who left, how far, what it costs,
+   what happens in March, and who comes back. Transit lines play while you
+   are being carried; dwell lines once you have arrived at a colony. */
+var transitLines=[null,
+  'The ones hanging here hatched in Ontario, in August.',
+  'They flew four thousand kilometres on a sun compass and an inherited heading.',
+  'None of them had been here before. None will come this way again.',
+  'A summer monarch lives five weeks. This generation will live eight months.',
+  'Everything they need until March is already inside them.',
+  'In March the survivors fly north, lay eggs in Texas, and die.'];
+var dwellLines=[
+  'November. They arrived three weeks ago.',
+  'Four generations stand between them and the last butterflies to leave this forest.',
+  'Their great-grandparents went north in spring. No one taught these the way.',
+  'Twelve hectares of oyamel fir. The eastern migration has nowhere else to go.',
+  'This is not sleep. It is arithmetic — every gram of fat spent against March.',
+  'Warmth is the only thing that can spend it for them. A hand is warm.',
+  'It takes their children’s children to reach Canada, and their children to return.'];
+var pending=null;
+function tellTransit(n){
+  var l=transitLines[n%transitLines.length];
+  if(l) pending={t:1.6,line:l,hold:7500};
+}
+function tellDwell(n){
+  var l=dwellLines[n%dwellLines.length];
+  if(l) pending={t:2.4,line:l,hold:8500};
+}
+var beats={
+  touch:'Your warmth reaches them.',
+  shiver:'A shiver passes through the clump.',
+  first:'One lets go.',
+  f5:'On the ground they are too cold to climb back.',
+  f25:'Each one spent what it could not replace.',
+  f120:'That many will not be flying north.'
+};
+var fired={};
+function narrate(k){ if(!fired[k]&&beats[k]){fired[k]=true;showNarr(beats[k],7000);} }
+function updatePending(dt){
+  if(!pending)return;
+  pending.t-=dt;
+  if(pending.t<=0){ showNarr(pending.line,pending.hold); pending=null; }
+}
+tellDwell(0);
+
+/* ===================== coach ===================== */
+var coachSteps=[
+  {t:'raise one hand where the camera can see it', hold:0.6, done:function(s){return s.hands>0;}},
+  {t:'move the ring over the butterflies', hold:0.8, done:function(s){return s.onColony;}},
+  {t:'hold it there, or sweep across them', hold:1.0, done:function(s){return s.warmth>0.25;}}
+];
+var coachIdx=0, coachHeld=0, coachShown=false, coachDone=false;
+function updateCoach(dt,s){
+  if(coachDone)return;
+  var st=coachSteps[coachIdx];
+  if(!coachShown){ coachEl.textContent=st.t; coachEl.classList.add('show'); coachShown=true; }
+  if(st.done(s)){
+    coachHeld+=dt;
+    if(coachHeld>=st.hold){
+      coachIdx++; coachHeld=0; coachShown=false;
+      coachEl.classList.remove('show');
+      if(coachIdx>=coachSteps.length) coachDone=true;
+    }
+  } else coachHeld=Math.max(0,coachHeld-dt*0.5);
+}
+
+/* ===================== touch ===================== */
+var TOUCH_RADIUS=0.36;   /* generous: roughly the on-screen ring */
+var TOUCH_RANGE=4.2;
+/* These must clear the 0.5/s agitation decay or a hovering hand can never
+   rouse anything. A centred hover nets +0.67/s, a moving one +1.5/s; the
+   soft edge of the ring stays negative, so only deliberate contact counts. */
+var HOVER_RATE=2.2;
+var MOTION_RATE=2.6;
+var raycaster=new THREE.Raycaster();
+var ndc=new THREE.Vector2();
+var stat={hands:0,warmth:0,onColony:false};
+
+function applyTouch(dt){
+  var h=M.hand;
+  if(!h||!h.live){
+    handEl.classList.remove('on'); handWarm.style.opacity='0';
+    stat.hands=0; stat.warmth=0; stat.onColony=false;
+    return;
+  }
+  handEl.classList.add('on');
+  var sx=(h.x*0.5+0.5)*W, sy=(-h.y*0.5+0.5)*H;
+  handEl.style.transform='translate('+sx.toFixed(1)+'px,'+sy.toFixed(1)+'px)';
+
+  ndc.set(h.x,h.y);
+  raycaster.setFromCamera(ndc,camera);
+  var rate=HOVER_RATE+MOTION_RATE*Math.min(1,h.energy);
+  var hit=false, peak=0;
+  for(var i=0;i<flies.length;i++){
+    var f=flies[i];
+    if(f.state!=='cling')continue;
+    var d=camera.position.distanceTo(f.group.position);
+    if(d>TOUCH_RANGE)continue;
+    var rd=raycaster.ray.distanceToPoint(f.group.position);
+    if(rd>TOUCH_RADIUS)continue;
+    var fall=1-rd/TOUCH_RADIUS;
+    fall*=fall;                                 /* soft centre-weighted falloff */
+    var near=1-Math.min(1,d/TOUCH_RANGE);
+    f.agit=Math.min(1,f.agit+rate*fall*(0.35+near*0.65)*dt);
+    hit=true; if(fall>peak) peak=fall;
+  }
+  if(hit){ narrate('touch'); }
+  handWarm.style.opacity=hit?'1':'0';
+  handWarm.style.transform='scale('+(0.45+(hit?0.55:0)+Math.min(1,h.energy)*0.35).toFixed(2)+')';
+  stat.hands=1;
+  stat.warmth=hit?Math.min(1,rate*0.55)*peak:0;
+  stat.onColony=hit;
+}
+
+/* ===================== butterflies ===================== */
+function updateButterflies(dt){
+  for(var i=0;i<flies.length;i++){
+    var f=flies[i];
+    if(f.state==='cling'){
+      if(f.agit>0.45){
+        for(var n=0;n<f.nb.length;n++){
+          var nb=flies[f.nb[n]];
+          if(nb.state==='cling'&&nb.agit<f.agit*0.9){
+            nb.agit=Math.min(nb.agit+dt*0.8,f.agit*0.9);
+          }
+        }
+      }
+      f.wake+=(f.agit-f.wake)*Math.min(1,dt*4);
+      f.agit=Math.max(0,f.agit-dt*0.5);
+      if(f.wake>0.1){
+        var sh=f.wake*0.007;
+        f.group.position.set(f.home.x+(Math.random()-0.5)*sh,
+          f.home.y+(Math.random()-0.5)*sh, f.home.z+(Math.random()-0.5)*sh);
+      }
+      /* closed at rest, opening as they rouse — fold 1 = wings together */
+      var fold=0.90-f.wake*0.80;
+      f.phase+=dt*(1.6+f.wake*18);
+      var flap=Math.sin(f.phase)*f.wake*0.40;
+      var a=Math.max(0,Math.min(1.62,(fold+flap)*1.62));
+      f.lw.rotation.y= a;
+      f.rw.rotation.y=-a;
+      if(f.wake>0.34){
+        f.lw.material=matUpperL; f.rw.material=matUpperR; narrate('shiver');
+      } else { f.lw.material=matUnderL; f.rw.material=matUnderR; }
+      if(f.wake>f.letGo) f.heat+=dt; else f.heat=Math.max(0,f.heat-dt*0.8);
+      if(f.heat>0.7&&Math.random()<dt*1.2){
+        narrate('first');
+        f.state='fall'; f.heat=0;
+        f.vx=(Math.random()-0.5)*1.0; f.vy=Math.random()*0.25;
+        f.vz=(Math.random()-0.5)*1.0;
+      }
+    }
+    else if(f.state==='fall'){
+      f.vy-=dt*2.8;
+      f.vx+=Math.sin(performance.now()*0.006+f.phase)*dt*2;
+      f.vz+=Math.cos(performance.now()*0.005+f.phase*1.3)*dt*2;
+      f.vx*=0.98; f.vz*=0.98;
+      f.group.position.x+=f.vx*dt;
+      f.group.position.y+=f.vy*dt;
+      f.group.position.z+=f.vz*dt;
+      f.group.rotateOnAxis(upV,dt*2.4);
+      f.phase+=dt*14;
+      var ff=Math.sin(f.phase)*0.5+0.5;
+      f.lw.rotation.y= ff*0.55;
+      f.rw.rotation.y=-ff*0.55;
+      if(f.group.position.y<=0.022){
+        f.group.position.y=0.022; f.state='dead';
+        /* settle flat on the floor, wings half open, as a dead one lies */
+        setBasis(f.group,new THREE.Vector3(0,0.06,0).add(
+          new THREE.Vector3(Math.random()-0.5,0,Math.random()-0.5)).normalize(),
+          new THREE.Vector3(Math.random()-0.5,1,Math.random()-0.5).normalize());
+        f.lw.material=matUnderL; f.rw.material=matUnderR;
+        var open=0.22+Math.random()*0.5;
+        f.lw.rotation.y= open; f.rw.rotation.y=-open;
+        fallenCount++; fallenEl.textContent=fallenCount;
+        if(snd) snd.fall();
+        if(fallenCount>=5)   narrate('f5');
+        if(fallenCount>=25)  narrate('f25');
+        if(fallenCount>=120) narrate('f120');
+        if(!endShown&&fallenCount>=END_AT){
+          endShown=true;
+          setTimeout(function(){
+            endEl.classList.add('show');
+            setTimeout(function(){restartBtn.classList.add('show');},2500);
+          },2500);
+        }
+      }
+    }
+  }
+}
+
+/* ===================== atmosphere animation ===================== */
+var moteBase=motePos.slice();
+function updateAtmos(dt,time){
+  var at=motes.geometry.attributes.position, arr=at.array;
+  for(var p=0;p<moteCount;p++){
+    var sd=moteSeed[p];
+    arr[p*3]  =moteBase[p*3]  +Math.sin(time*0.11+sd)*0.5;
+    arr[p*3+1]=moteBase[p*3+1]+Math.sin(time*0.07+sd*1.7)*0.30;
+    arr[p*3+2]=moteBase[p*3+2]+Math.cos(time*0.09+sd*1.3)*0.5;
+  }
+  at.needsUpdate=true;
+  for(var s2=0;s2<shafts.length;s2++){
+    shafts[s2].material.opacity=(0.16+0.17*((s2%3)/3))*(0.78+0.22*Math.sin(time*0.2+s2));
+  }
+  for(var m2=0;m2<mists.length;m2++) mists[m2].rotation.z=time*0.012*(m2%2?1:-1);
+}
+
+function setMeter(el,v,active){
+  var pct=(Math.max(0,Math.min(1,v))*100).toFixed(0)+'%';
+  el.__bar=el.__bar||el.querySelector('i');
+  el.__bar.style.backgroundImage=
+    'linear-gradient(to right,var(--gold) '+pct+',rgba(237,229,216,.14) '+pct+')';
+  el.classList.toggle('on',active);
+}
+
+
+/* ===================== ambient score =====================
+   Generated with Web Audio — no audio files, since the artifact CSP blocks
+   external media. A low drone, filtered wind, and sparse bell tones in a
+   pentatonic set, all through a procedurally built reverb. Starts on the
+   intro click (browsers require a gesture) and fades in over several seconds. */
+var snd=null;
+function startAudio(){
+  if(snd)return;
+  var AC=window.AudioContext||window.webkitAudioContext;
+  if(!AC)return;
+  var ctx;
+  try{ ctx=new AC(); }catch(e){ return; }
+
+  var master=ctx.createGain();
+  master.gain.setValueAtTime(0.0001,ctx.currentTime);
+  master.gain.exponentialRampToValueAtTime(0.26,ctx.currentTime+8);
+  master.connect(ctx.destination);
+
+  /* reverb: exponentially decaying noise as an impulse response */
+  var rev=null;
+  try{
+    var n=Math.floor(ctx.sampleRate*3.6);
+    var imp=ctx.createBuffer(2,n,ctx.sampleRate);
+    for(var ch=0;ch<2;ch++){
+      var d=imp.getChannelData(ch);
+      for(var i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/n,2.8);
+    }
+    rev=ctx.createConvolver(); rev.buffer=imp;
+    var rg=ctx.createGain(); rg.gain.value=0.6;
+    rev.connect(rg); rg.connect(master);
+  }catch(e){ rev=null; }
+  var dry=ctx.createGain(); dry.gain.value=0.72; dry.connect(master);
+  function out(node){ node.connect(dry); if(rev) node.connect(rev); }
+
+  /* drone */
+  [55,82.41,110,164.81].forEach(function(f,i){
+    var o=ctx.createOscillator();
+    o.type=(i<2)?'sine':'triangle';
+    o.frequency.value=f*(1+(Math.random()-0.5)*0.004);
+    var g=ctx.createGain(); g.gain.value=(i<2)?0.085:0.035;
+    var lp=ctx.createBiquadFilter(); lp.type='lowpass';
+    lp.frequency.value=380; lp.Q.value=0.6;
+    o.connect(g); g.connect(lp); out(lp);
+    var lfo=ctx.createOscillator(); lfo.frequency.value=0.013+i*0.0065;
+    var lg=ctx.createGain(); lg.gain.value=0.05;
+    lfo.connect(lg); lg.connect(g.gain);
+    o.start(); lfo.start();
+  });
+
+  /* wind */
+  try{
+    var nl=Math.floor(ctx.sampleRate*4);
+    var nb=ctx.createBuffer(1,nl,ctx.sampleRate);
+    var nd=nb.getChannelData(0);
+    for(var k=0;k<nl;k++) nd[k]=Math.random()*2-1;
+    var ns=ctx.createBufferSource(); ns.buffer=nb; ns.loop=true;
+    var bp=ctx.createBiquadFilter(); bp.type='bandpass';
+    bp.frequency.value=460; bp.Q.value=0.8;
+    var ng=ctx.createGain(); ng.gain.value=0.05;
+    ns.connect(bp); bp.connect(ng); out(ng);
+    var wl=ctx.createOscillator(); wl.frequency.value=0.028;
+    var wg=ctx.createGain(); wg.gain.value=230;
+    wl.connect(wg); wg.connect(bp.frequency);
+    ns.start(); wl.start();
+  }catch(e){}
+
+  function tone(freq,peak,attack,release,pan){
+    var o=ctx.createOscillator(); o.type='sine'; o.frequency.value=freq;
+    var g=ctx.createGain(); g.gain.setValueAtTime(0.0001,ctx.currentTime);
+    o.connect(g);
+    var tail=g;
+    if(ctx.createStereoPanner){
+      var pn=ctx.createStereoPanner();
+      pn.pan.value=(pan===undefined)?(Math.random()-0.5)*1.3:pan;
+      g.connect(pn); tail=pn;
+    }
+    out(tail);
+    var t=ctx.currentTime;
+    g.gain.exponentialRampToValueAtTime(peak,t+attack);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+attack+release);
+    o.start(t); o.stop(t+attack+release+0.2);
+  }
+
+  /* sparse bells, pentatonic */
+  var scale=[220,246.94,293.66,329.63,440,493.88,587.33,659.25];
+  function bell(){
+    if(snd&&!snd.muted) tone(scale[(Math.random()*scale.length)|0],0.075,1.8,6.5);
+    setTimeout(bell,6000+Math.random()*10000);
+  }
+  setTimeout(bell,5000+Math.random()*6000);
+
+  snd={ctx:ctx,muted:false,lastFall:0,
+    fall:function(){
+      if(this.muted)return;
+      var now=performance.now();
+      if(now-this.lastFall<1600)return;
+      this.lastFall=now;
+      tone(110*(Math.random()>0.5?1:0.75),0.05,0.35,3.4,(Math.random()-0.5)*1.2);
+    },
+    toggle:function(){
+      this.muted=!this.muted;
+      var t=ctx.currentTime, cur=Math.max(0.0001,master.gain.value);
+      master.gain.cancelScheduledValues(t);
+      master.gain.setValueAtTime(cur,t);
+      master.gain.exponentialRampToValueAtTime(this.muted?0.0001:0.26,t+0.8);
+      return this.muted;
+    }};
+  if(ctx.state==='suspended'&&ctx.resume) ctx.resume();
+}
+
+/* ===================== flow ===================== */
+document.addEventListener('keydown',function(e){
+  if(e.code==='KeyI'){ e.preventDefault(); aboutEl.classList.toggle('show'); }
+  if(e.code==='KeyC'&&motionMode){
+    e.preventDefault(); document.getElementById('pip').classList.toggle('show');
+  }
+  if(e.code==='KeyM'&&snd){
+    e.preventDefault();
+    var m=snd.toggle();
+    noteEl.textContent=m?'sound off · press m for sound · i about'
+      :(motionMode?'press m to mute · i for the idea'
+                 :'preview · move the mouse to reach · m mute · i about');
+  }
+});
+aboutEl.addEventListener('click',function(){aboutEl.classList.remove('show');});
+document.getElementById('infoBtn').addEventListener('click',function(e){
+  e.stopPropagation(); aboutEl.classList.toggle('show');
+});
+
+introEl.addEventListener('click',function(){
+  if(phase!=='intro')return;
+  phase='calib';
+  introEl.classList.add('gone');
+  calibEl.classList.add('on');
+  startAudio();   /* the click is the gesture browsers require for audio */
+  if(window.TORPOR_MOTION_START) window.TORPOR_MOTION_START();
+  else { M.failed=true; M.status='pose module blocked — needs localhost'; }
+});
+function beginPlay(withMotion){
+  if(phase==='play')return;
+  phase='play'; motionMode=!!withMotion;
+  calibEl.classList.add('gone');
+  setTimeout(function(){calibEl.classList.remove('on');},1200);
+  hud.classList.add('show');
+  if(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches)
+    document.getElementById('infoBtn').classList.add('show');
+  if(motionMode){
+    /* reparent the calibration preview — the calib screen is about to be
+       hidden, and a hidden parent would take the thumbnail with it */
+    var camWrap=document.querySelector('.cam-wrap');
+    if(camWrap) document.getElementById('pip').appendChild(camWrap);
+    document.getElementById('pip').classList.add('show');
+  }
+  var coarse=window.matchMedia&&window.matchMedia('(pointer:coarse)').matches;
+  noteEl.textContent=motionMode?'c camera · m mute · i for the idea'
+    :(coarse?'preview · drag a finger to reach · tap i for the idea'
+           :'preview · move the mouse to reach · m mute · i about');
+  noteEl.classList.add('show');
+}
+skipBtn.addEventListener('click',function(e){ e.stopPropagation(); beginPlay(false); });
+
+function updateCalibUI(){
+  chkCam.classList.toggle('ok',M.camOK);
+  chkHands.classList.toggle('ok',M.handsOK);
+  calStat.textContent=M.status||'';
+  if(M.failed){ calCount.textContent=''; skipBtn.classList.add('on'); }
+  else calCount.textContent=M.countdown>0?Math.ceil(M.countdown):'';
+  if(M.on) beginPlay(true);
+}
+
+/* Fallback input for anyone without the camera (the published artifact can
+   never have it). Pointer events cover mouse, pen and touch in one path.
+   A mouse hovers, so it stays live; a finger only exists while it is down,
+   otherwise lifting it would leave the ring warming the colony forever. */
+var ptrDown=false, ptrTouch=false, pPrev=null;
+function readPointer(e){
+  if(motionMode||phase!=='play')return;
+  var x=(e.clientX/W)*2-1, y=-((e.clientY/H)*2-1), en=0;
+  if(pPrev) en=Math.min(1,(Math.abs(x-pPrev.x)+Math.abs(y-pPrev.y))*7);
+  pPrev={x:x,y:y};
+  M.hand={live:true,x:x,y:y,energy:ptrDown?Math.max(0.55,en):en};
+}
+window.addEventListener('pointerdown',function(e){
+  ptrDown=true; ptrTouch=(e.pointerType==='touch');
+  pPrev=null; readPointer(e);
+},{passive:true});
+window.addEventListener('pointermove',readPointer,{passive:true});
+function pointerEnd(e){
+  ptrDown=false;
+  if(e&&e.pointerType==='touch'){ M.hand.live=false; pPrev=null; }
+}
+window.addEventListener('pointerup',pointerEnd,{passive:true});
+window.addEventListener('pointercancel',pointerEnd,{passive:true});
+
+restartBtn.addEventListener('click',function(e){
+  e.stopPropagation();
+  endEl.classList.remove('show'); restartBtn.classList.remove('show');
+  fallenCount=0; fallenEl.textContent='0'; endShown=false;
+  for(var i=0;i<flies.length;i++){
+    var f=flies[i];
+    f.state='cling'; f.agit=0; f.wake=0; f.heat=0;
+    f.vx=0;f.vy=0;f.vz=0;
+    f.group.position.copy(f.home);
+    setBasis(f.group,f.yA,f.zA);
+    f.lw.material=matUnderL; f.rw.material=matUnderR;
+    f.lw.rotation.y= 0.90*1.62; f.rw.rotation.y=-0.90*1.62;
+  }
+  fired={}; narrEl.classList.remove('show');
+  if(narrTimer)clearTimeout(narrTimer);
+});
+
+window.addEventListener('resize',function(){
+  W=window.innerWidth; H=window.innerHeight;
+  camera.aspect=W/H; camera.updateProjectionMatrix();
+  renderer.setSize(W,H);
+});
+
+var clock=new THREE.Clock(), elapsed=0;
+function loop(){
+  requestAnimationFrame(loop);
+  var dt=Math.min(0.05,clock.getDelta());
+  elapsed+=dt;
+  if(phase==='calib') updateCalibUI();
+  updateAtmos(dt,elapsed);
+  if(phase==='play'){
+    updateRig(dt);
+    applyTouch(dt);
+    updateButterflies(dt);
+    updatePending(dt);
+    updateCoach(dt,stat);
+    setMeter(mHands,stat.hands,stat.hands>0);
+    setMeter(mWarm,stat.warmth,stat.warmth>0.03);
+  } else {
+    camera.position.x=Math.sin(elapsed*0.08)*1.1;
+    camera.position.y=1.85+Math.sin(elapsed*0.13)*0.08;
+    camera.lookAt(0,4.2,0);
+  }
+  renderer.render(scene,camera);
+}
+loop();
+})();
+</script>
+
+<!-- ============ pose: hands only ============ -->
+<script type="module">
+const M=window.TORPOR_MOTION;
+
+const VER='0.10.14';
+const BUNDLE=`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VER}/vision_bundle.mjs`;
+const WASM  =`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VER}/wasm`;
+const MODEL ='https://storage.googleapis.com/mediapipe-models/pose_landmarker/'+
+             'pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+
+const LWR=15, RWR=16, LEL=13, REL=14, LSH=11, RSH=12, NOSE=0;
+
+/* ---- the ring follows the HAND ITSELF, in camera-frame coordinates.
+   Nothing about the body feeds into it, so leaning or shifting your weight
+   does not move the ring. The active box is the middle of the frame:
+   a hand at the box edge puts the ring at the screen edge.
+   Widen BOX_* if the ring will not reach the corners; narrow it if the ring
+   hits the edge too early. ---- */
+const BOX_CX=0.50, BOX_HX=0.30;   /* centre and half-width in frame x */
+const BOX_CY=0.46, BOX_HY=0.30;   /* centre and half-height in frame y */
+const VIS_ON=0.30;                /* generous: keeps the ring from dropping out */
+const GRACE=0.70;                 /* seconds a lost hand keeps its ring */
+const SMOOTH=7.0;                 /* lower = smoother, laggier */
+const HOLD_TO_ENTER=1.2;
+
+const video=document.getElementById('cam');
+const skel=document.getElementById('skel');
+const sctx=skel.getContext('2d');
+
+let pose=null, ready=false, lastT=0;
+let smooth={x:0,y:0,set:false};
+let energy=0, liveFor=0, activeHand=-1;
+M.countdown=HOLD_TO_ENTER;
+
+const vis=l=>(l&&(l.visibility===undefined?1:l.visibility))||0;
+const mx=l=>1-l.x;   /* mirror so +x is the viewer's right */
+
+window.TORPOR_MOTION_START=async function(){
+  try{
+    M.status='loading pose model';
+    const vision=await import(BUNDLE);
+    const fs=await vision.FilesetResolver.forVisionTasks(WASM);
+    const opts=(delegate)=>({
+      baseOptions:{modelAssetPath:MODEL,delegate},
+      runningMode:'VIDEO',numPoses:1,
+      minPoseDetectionConfidence:0.4,
+      minPosePresenceConfidence:0.4,
+      minTrackingConfidence:0.4
+    });
+    try{ pose=await vision.PoseLandmarker.createFromOptions(fs,opts('GPU')); }
+    catch(e){ pose=await vision.PoseLandmarker.createFromOptions(fs,opts('CPU')); }
+  }catch(err){
+    M.failed=true; M.status='pose model unavailable — needs localhost + internet';
+    return;
+  }
+  try{
+    M.status='asking for the camera';
+    const stream=await navigator.mediaDevices.getUserMedia({
+      video:{width:{ideal:640},height:{ideal:480},facingMode:'user'},audio:false});
+    video.srcObject=stream;
+    await video.play();
+    skel.width=video.videoWidth||640; skel.height=video.videoHeight||480;
+    M.camOK=true; ready=true;
+    M.status='raise one hand and hold it up';
+    requestAnimationFrame(tick);
+  }catch(err){
+    M.failed=true; M.status='camera refused — '+((err&&err.name)||'error');
+  }
+};
+
+function tick(ts){
+  requestAnimationFrame(tick);
+  if(!pose||!ready||video.readyState<2)return;
+  if(ts-lastT<45)return;                /* ~22 Hz */
+  const dt=Math.min(0.2,(ts-lastT)/1000); lastT=ts;
+
+  let res;
+  try{ res=pose.detectForVideo(video,ts); }catch(e){ return; }
+  const L=res&&res.landmarks&&res.landmarks[0];
+  draw(L||null);
+  if(!L){ M.handsOK=false; release(dt); if(!M.on) M.countdown=HOLD_TO_ENTER; return; }
+
+  /* ONE hand only. Whichever wrist is raised higher wins, and it keeps the
+     ring until it is lost or the other is clearly higher, so the ring never
+     flickers back and forth between two hands. */
+  const wr=[L[LWR],L[RWR]];
+  const seen=[vis(wr[0])>=VIS_ON, vis(wr[1])>=VIS_ON];
+  M.handsOK=seen[0]||seen[1];
+
+  let pick=-1;
+  if(seen[0]&&seen[1]){
+    const higher=(wr[0].y<wr[1].y)?0:1;          /* smaller y = higher in frame */
+    if(activeHand<0||!seen[activeHand]) pick=higher;
+    else if(higher!==activeHand&&Math.abs(wr[0].y-wr[1].y)>0.07) pick=higher;
+    else pick=activeHand;
+  } else if(seen[0]) pick=0;
+  else if(seen[1]) pick=1;
+
+  if(pick<0){
+    liveFor=Math.max(0,liveFor-dt);
+    if(liveFor<=0){ M.hand.live=false; smooth.set=false; activeHand=-1; }
+    energy*=Math.pow(0.25,dt);
+    M.hand.energy=Math.max(0,Math.min(1,energy));
+  } else {
+    if(pick!==activeHand){ smooth.set=false; activeHand=pick; }
+    const w=wr[pick];
+    liveFor=GRACE;
+    /* frame position -> screen. Hand only: nothing about the body feeds in. */
+    const tx=Math.max(-1,Math.min(1,(mx(w)-BOX_CX)/BOX_HX));
+    const ty=Math.max(-1,Math.min(1,-((w.y-BOX_CY)/BOX_HY)));
+    if(!smooth.set){ smooth.x=tx; smooth.y=ty; smooth.set=true; }
+    const k=Math.min(1,dt*SMOOTH);
+    const px=smooth.x, py=smooth.y;
+    smooth.x+=(tx-smooth.x)*k;
+    smooth.y+=(ty-smooth.y)*k;
+    const speed=(Math.abs(smooth.x-px)+Math.abs(smooth.y-py))/Math.max(dt,0.001);
+    energy=energy*Math.pow(0.08,dt)+Math.min(1.4,speed*0.30);
+    M.hand.live=true;
+    M.hand.x=smooth.x;
+    M.hand.y=smooth.y;
+    M.hand.energy=Math.max(0,Math.min(1,energy));
+  }
+  const any=M.handsOK;
+
+  /* entry: just hold a hand up */
+  if(!M.on){
+    if(any){
+      M.countdown=Math.max(0,M.countdown-dt);
+      M.status='holding';
+      if(M.countdown<=0){ M.on=true; M.status='ready'; }
+    } else {
+      M.countdown=HOLD_TO_ENTER;
+      M.status='raise one hand and hold it up';
+    }
+  }
+}
+
+function release(dt){
+  liveFor=Math.max(0,liveFor-dt);
+  if(liveFor<=0){ M.hand.live=false; smooth.set=false; activeHand=-1; }
+  energy*=Math.pow(0.1,dt);
+  M.hand.energy=Math.max(0,Math.min(1,energy));
+}
+
+const BONES=[[11,12],[11,13],[13,15],[12,14],[14,16]];
+function draw(L){
+  sctx.clearRect(0,0,skel.width,skel.height);
+  if(!L)return;
+  sctx.strokeStyle='rgba(198,139,44,.7)'; sctx.lineWidth=2;
+  for(const [a,b] of BONES){
+    if(vis(L[a])<0.3||vis(L[b])<0.3)continue;
+    sctx.beginPath();
+    sctx.moveTo(L[a].x*skel.width,L[a].y*skel.height);
+    sctx.lineTo(L[b].x*skel.width,L[b].y*skel.height);
+    sctx.stroke();
+  }
+  /* mark the one hand being tracked; dim the other */
+  [LWR,RWR].forEach((idx,n)=>{
+    if(vis(L[idx])<VIS_ON)return;
+    const on=(activeHand===n);
+    const x=L[idx].x*skel.width, y=L[idx].y*skel.height;
+    sctx.strokeStyle=on?'rgba(198,139,44,.98)':'rgba(198,139,44,.26)';
+    sctx.lineWidth=on?2.4:1.4;
+    sctx.beginPath(); sctx.arc(x,y,on?15:9,0,6.2832); sctx.stroke();
+    sctx.fillStyle=on?'rgba(237,229,216,.95)':'rgba(237,229,216,.28)';
+    sctx.beginPath(); sctx.arc(x,y,on?4:2.4,0,6.2832); sctx.fill();
+  });
+  sctx.fillStyle='rgba(237,229,216,.5)';
+  for(const i of [NOSE,LSH,RSH]){
+    if(vis(L[i])<0.3)continue;
+    sctx.beginPath();
+    sctx.arc(L[i].x*skel.width,L[i].y*skel.height,2.4,0,6.2832); sctx.fill();
+  }
+}
+</script>
+
+</body>
+</html>
